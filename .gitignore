@@ -4,6 +4,9 @@
 
 /Backend/.env
 
+# Prevent committing service account JSON
+Backend/service-account-key.json
+
 /Attendance model traning/venv/
 /Attendance model traning/models/
 /Attendance model traning/teacher/
@@ -16,6 +19,10 @@
 # /Attendance model traning/*.json
 
 Backend/**/__pycache__/
+
+ignore/
+ignore/*
+
 
 
 /.vscode/

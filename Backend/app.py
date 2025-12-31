@@ -33,10 +33,12 @@ def create_app():
             'pool_pre_ping': True,
             'max_overflow': 20
         }
-        print("🐘 Using PostgreSQL database")
+        if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+            print("🐘 Using PostgreSQL database")
     else:
         app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-        print("📁 Using SQLite database")
+        if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+            print("📁 Using SQLite database")
     
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'jwt-secret-string')
@@ -57,22 +59,25 @@ def create_app():
          allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
          expose_headers=['Authorization'],
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
-    print("🌐 CORS configured for all origins with Authorization header support")
+    if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+        print("🌐 CORS configured for all origins with Authorization header support")
     
     # Initialize vector database
     try:
         from services.vector_db import get_vector_db_service
         vector_db = get_vector_db_service()
         app.vector_db = vector_db
-        print(f"🔍 Vector database initialized: {vector_db.db_type}")
-        
-        # Get stats
-        stats = vector_db.get_stats()
-        print(f"📊 Vector DB stats: {stats}")
+        if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+            print(f"🔍 Vector database initialized: {vector_db.db_type}")
+            
+            # Get stats
+            stats = vector_db.get_stats()
+            print(f"📊 Vector DB stats: {stats}")
         
     except Exception as e:
-        print(f"⚠️  Warning: Vector database initialization failed: {e}")
-        print("   Face recognition will use fallback method")
+        if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+            print(f"⚠️  Warning: Vector database initialization failed: {e}")
+            print("   Face recognition will use fallback method")
         app.vector_db = None
     
     # Register blueprints
@@ -86,10 +91,11 @@ def create_app():
     app.register_blueprint(face_data_bp, url_prefix='/api/face-data')
     app.register_blueprint(attendance_bp, url_prefix='/api/attendance')
     
-    # Debug: Print all registered routes
-    print("🔥 REGISTERED ROUTES:")
-    for rule in app.url_map.iter_rules():
-        print(f"🔥 {rule.endpoint}: {rule.rule} [{', '.join(rule.methods)}]")
+    # Debug: Print all registered routes (only on main process)
+    if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+        print("🔥 REGISTERED ROUTES:")
+        for rule in app.url_map.iter_rules():
+            print(f"🔥 {rule.endpoint}: {rule.rule} [{', '.join(rule.methods)}]")
     
     # Health check endpoint
     @app.route('/health')
@@ -164,22 +170,25 @@ def check_dependencies():
     return True
 
 if __name__ == '__main__':
-    print("🚀 Starting Attendly Backend Server...")
-    print("=" * 50)
-    
-    # Check dependencies
-    if not check_dependencies():
-        print("❌ Cannot start server due to missing dependencies")
-        sys.exit(1)
+    port = int(os.getenv('PORT', 3000))
+    # Only show startup messages on main process (not reloader)
+    if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+        print("🚀 Starting Attendly Backend Server...")
+        print("=" * 50)
+        
+        # Check dependencies
+        if not check_dependencies():
+            print("❌ Cannot start server due to missing dependencies")
+            sys.exit(1)
+        
+        print("🎉 Server is ready!")
+        print(f"📍 API Base URL: http://localhost:{port}/api")
+        print(f"🏥 Health Check: http://localhost:{port}/health")
+        print("📚 Documentation: See README.md")
+        print("🔄 Debug mode: ON (auto-reload enabled)")
+        print("💡 Press Ctrl+C to stop the server")
+        print("=" * 50)
     
     # Create and run app
     app = create_app()
-    
-    print("=" * 50)
-    print("🎉 Server is ready!")
-    print("📍 API Base URL: http://localhost:5000/api")
-    print("🏥 Health Check: http://localhost:5000/health")
-    print("📚 Documentation: See README.md")
-    print("=" * 50)
-    
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=port)

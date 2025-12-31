@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import '../../providers/auth_provider.dart';
@@ -22,13 +23,24 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   final _descriptionController = TextEditingController();
   final ApiService _apiService = ApiService();
   List<ClassModel> _createdClasses = [];
+  Map<int, double> _classAttendanceRates =
+      {}; // Store attendance rates for each class
+  Map<int, int> _classStudentCounts =
+      {}; // Store actual student counts for each class
   bool _isLoading = false;
   String? _error;
+
+  // Dashboard statistics
+  int _totalClasses = 0;
+  int _totalStudents = 0;
+  int _todaysSessions = 0;
+  double _avgAttendance = 0.0;
 
   @override
   void initState() {
     super.initState();
     _loadCreatedClasses();
+    _loadDashboardStats();
   }
 
   @override
@@ -54,6 +66,12 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
       print('🔥 FLUTTER: Loading created classes from API...');
       final classes = await _apiService.getMyClasses();
 
+      // Calculate attendance rates and student counts for each class
+      for (final classModel in classes) {
+        await _calculateAttendanceRate(classModel.id);
+        await _calculateStudentCount(classModel.id);
+      }
+
       setState(() {
         _createdClasses = classes;
         _isLoading = false;
@@ -76,6 +94,112 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
           ),
         );
       }
+    }
+  }
+
+  Future<void> _calculateAttendanceRate(int classId) async {
+    try {
+      final sessions = await _apiService.getClassSessions(classId);
+
+      if (sessions.isEmpty) {
+        _classAttendanceRates[classId] = 0.0;
+        return;
+      }
+
+      double totalAttendanceRate = 0.0;
+      int validSessions = 0;
+
+      for (final session in sessions) {
+        // Use the proper object properties instead of bracket notation
+        final totalStudents = session.totalStudents;
+        final presentCount = session.presentCount;
+
+        if (totalStudents > 0) {
+          totalAttendanceRate += (presentCount / totalStudents) * 100;
+          validSessions++;
+        }
+      }
+
+      final avgAttendanceRate = validSessions > 0
+          ? totalAttendanceRate / validSessions
+          : 0.0;
+      _classAttendanceRates[classId] = avgAttendanceRate;
+
+      print(
+        '🔥 FLUTTER: Class $classId attendance rate: ${avgAttendanceRate.toStringAsFixed(1)}%',
+      );
+    } catch (e) {
+      print(
+        '🔥 FLUTTER: Error calculating attendance rate for class $classId: $e',
+      );
+      _classAttendanceRates[classId] = 0.0;
+    }
+  }
+
+  Future<void> _calculateStudentCount(int classId) async {
+    try {
+      // Fetch students for the class
+      final students = await _apiService.getClassStudents(classId);
+      _classStudentCounts[classId] = students.length;
+
+      print(
+        '🔥 FLUTTER: Class $classId student count: ${_classStudentCounts[classId]}',
+      );
+    } catch (e) {
+      print(
+        '🔥 FLUTTER: Error calculating student count for class $classId: $e',
+      );
+      _classStudentCounts[classId] = 0;
+    }
+  }
+
+  Future<void> _loadDashboardStats() async {
+    try {
+      // Get token from auth provider and set in API service
+      final authProvider = context.read<AuthProvider>();
+      if (authProvider.token != null) {
+        _apiService.setToken(authProvider.token);
+        print('🔥 FLUTTER: Token set for dashboard stats API call');
+      } else {
+        print('🔥 FLUTTER: ERROR - No token available for dashboard stats');
+        return;
+      }
+
+      print('🔥 FLUTTER: Loading dashboard statistics from API...');
+      final statsData = await _apiService.getTeacherDashboardStats();
+
+      print('🔥 FLUTTER: Raw stats data received: $statsData');
+
+      if (statsData['statistics'] != null) {
+        final stats = statsData['statistics'];
+        print('🔥 FLUTTER: Statistics object: $stats');
+
+        final totalClasses = stats['total_classes'] ?? 0;
+        final totalStudents = stats['total_students'] ?? 0;
+        final todaysSessions = stats['todays_sessions'] ?? 0;
+        final avgAttendance = (stats['avg_attendance_rate'] ?? 0.0).toDouble();
+
+        print(
+          '🔥 FLUTTER: Parsed values - Classes: $totalClasses, Students: $totalStudents, Today: $todaysSessions, Avg: $avgAttendance',
+        );
+
+        setState(() {
+          _totalClasses = totalClasses;
+          _totalStudents = totalStudents;
+          _todaysSessions = todaysSessions;
+          _avgAttendance = avgAttendance;
+        });
+
+        print(
+          '🔥 FLUTTER: State updated - Classes: $_totalClasses, Students: $_totalStudents, Today: $_todaysSessions, Avg: $_avgAttendance%',
+        );
+      } else {
+        print('🔥 FLUTTER: ERROR - No statistics object in response');
+      }
+    } catch (e) {
+      print('🔥 FLUTTER: Error loading dashboard stats: $e');
+      print('🔥 FLUTTER: Error type: ${e.runtimeType}');
+      // Don't show error to user for stats, just use default values
     }
   }
 
@@ -118,8 +242,9 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
         ),
       );
 
-      // Reload the classes list
+      // Reload the classes list and stats
       _loadCreatedClasses();
+      _loadDashboardStats();
     } catch (e) {
       print('🔥 FLUTTER: Error creating class: $e');
       setState(() {
@@ -155,9 +280,10 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
 
       print('🔥 FLUTTER: Returned from Take Attendance. Result: $result');
 
-      // Refresh classes list if attendance was submitted
+      // Refresh classes list and stats if attendance was submitted
       if (result == true) {
         _loadCreatedClasses();
+        _loadDashboardStats();
       }
     } catch (e) {
       print('🔥 FLUTTER: Error navigating to Take Attendance: $e');
@@ -178,11 +304,35 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              classModel.joinCode,
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: AppTheme.primaryColor,
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppTheme.primaryColor.withOpacity(0.3),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    classModel.joinCode,
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.primaryColor,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => _copyJoinCode(classModel.joinCode),
+                    icon: const Icon(Icons.copy),
+                    tooltip: 'Copy Code',
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppTheme.primaryColor,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 16),
@@ -198,9 +348,54 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
           ),
+          ElevatedButton.icon(
+            onPressed: () => _copyJoinCode(classModel.joinCode),
+            icon: const Icon(Icons.copy),
+            label: const Text('Copy Code'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _copyJoinCode(String joinCode) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: joinCode));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check, color: Colors.white),
+                const SizedBox(width: 8),
+                Text('Join code "$joinCode" copied to clipboard!'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to copy code: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
   }
 
   void _showCreateClassDialog() {
@@ -273,7 +468,9 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _loadCreatedClasses,
+        onRefresh: () async {
+          await Future.wait([_loadCreatedClasses(), _loadDashboardStats()]);
+        },
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : SingleChildScrollView(
@@ -294,7 +491,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                             Expanded(
                               child: _buildStatCard(
                                 'Total Classes',
-                                '${_createdClasses.length}',
+                                '$_totalClasses',
                                 Icons.school,
                                 AppTheme.primaryColor,
                               ),
@@ -303,7 +500,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                             Expanded(
                               child: _buildStatCard(
                                 'Total Students',
-                                '${_createdClasses.fold<int>(0, (sum, c) => sum + c.totalStudents)}',
+                                '$_totalStudents',
                                 Icons.people,
                                 AppTheme.successColor,
                               ),
@@ -318,7 +515,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                             Expanded(
                               child: _buildStatCard(
                                 'Today\'s Sessions',
-                                '3',
+                                '$_todaysSessions',
                                 Icons.today,
                                 AppTheme.warningColor,
                               ),
@@ -327,7 +524,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                             Expanded(
                               child: _buildStatCard(
                                 'Avg. Attendance',
-                                '87%',
+                                '${_avgAttendance.toStringAsFixed(1)}%',
                                 Icons.trending_up,
                                 AppTheme.secondaryColor,
                               ),
@@ -583,7 +780,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                     Icon(Icons.people, size: 14, color: AppTheme.primaryColor),
                     const SizedBox(width: 4),
                     Text(
-                      '${classModel.totalStudents}',
+                      '${_classStudentCounts[classModel.id] ?? classModel.totalStudents}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: AppTheme.primaryColor,
                         fontWeight: FontWeight.w600,
@@ -609,7 +806,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '87%',
+                      '${(_classAttendanceRates[classModel.id] ?? 0.0).toStringAsFixed(1)}%',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: AppTheme.successColor,
                         fontWeight: FontWeight.w600,

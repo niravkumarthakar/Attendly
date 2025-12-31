@@ -39,6 +39,9 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
   int _totalRecognized = 0;
   double _recognitionRate = 0.0;
 
+  // Date selection for attendance
+  DateTime _selectedDate = DateTime.now();
+
   @override
   void initState() {
     super.initState();
@@ -380,12 +383,13 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
       // Create attendance session
-      final sessionResponse = await authProvider.apiService.createAttendanceSession(
-        classId: widget.classId,
-        sessionName:
-            'Attendance - ${DateFormat('MMM dd, yyyy').format(DateTime.now())}',
-        sessionDate: DateTime.now(),
-      );
+      final sessionResponse = await authProvider.apiService
+          .createAttendanceSession(
+            classId: widget.classId,
+            sessionName:
+                'Attendance - ${DateFormat('MMM dd, yyyy').format(_selectedDate)}',
+            sessionDate: _selectedDate,
+          );
 
       final sessionId = sessionResponse['session']['id'];
 
@@ -468,6 +472,21 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
     });
   }
 
+  Future<void> _selectDate() async {
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+      lastDate: DateTime.now().add(const Duration(days: 7)),
+    );
+
+    if (pickedDate != null && pickedDate != _selectedDate) {
+      setState(() {
+        _selectedDate = pickedDate;
+      });
+    }
+  }
+
   @override
   void dispose() {
     _cameraController?.dispose();
@@ -480,11 +499,23 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
       appBar: AppBar(
         title: Text(widget.className),
         actions: [
+          IconButton(
+            onPressed: _selectDate,
+            icon: const Icon(Icons.calendar_today),
+            tooltip: 'Select Date',
+          ),
           if (_hasProcessedPhoto)
-            TextButton.icon(
+            TextButton(
+              style: TextButton.styleFrom(
+                backgroundColor: Theme.of(context).primaryColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 8,
+                ),
+              ),
               onPressed: _isProcessing ? null : _submitAttendance,
-              icon: const Icon(Icons.check, color: Colors.white),
-              label: const Text(
+              child: const Text(
                 'Submit',
                 style: TextStyle(
                   color: Colors.white,
@@ -492,6 +523,7 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
                 ),
               ),
             ),
+          SizedBox(width: 16),
         ],
       ),
       body: Column(
@@ -633,6 +665,33 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
                     '${_recognitionRate.toStringAsFixed(1)}%',
                     Icons.analytics,
                     Colors.orange,
+                  ),
+                ],
+              ),
+            ),
+
+          // Selected Date Display
+          if (_hasProcessedPhoto)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.event, size: 16, color: Colors.blue),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Attendance Date: ${DateFormat('MMM dd, yyyy').format(_selectedDate)}',
+                    style: const TextStyle(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                    ),
                   ),
                 ],
               ),

@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/class.dart';
 import '../models/attendance.dart';
+import '../utils/config.dart';
 
 class ApiService {
-  // Use localhost when using adb reverse, or 10.0.2.2 for Android emulator without reverse
-  static const String baseUrl = 'http://localhost:5000';
+  static String get baseUrl => AppConfig.backendBaseUrl;
 
   String? _token;
 
@@ -250,6 +250,30 @@ class ApiService {
       return classes.map((json) => ClassModel.fromJson(json)).toList();
     } catch (e) {
       print('🔥 FLUTTER: Exception in getMyClasses: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> getTeacherDashboardStats() async {
+    print('🔥 FLUTTER: Getting teacher dashboard statistics');
+    print('🔥 FLUTTER: URL: $baseUrl/api/classes/dashboard-stats');
+    print('🔥 FLUTTER: Headers: $headers');
+
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/classes/dashboard-stats'),
+        headers: headers,
+      );
+
+      print(
+        '🔥 FLUTTER: Dashboard stats response status: ${response.statusCode}',
+      );
+      print('🔥 FLUTTER: Dashboard stats response body: ${response.body}');
+
+      final data = _handleResponse(response);
+      return data;
+    } catch (e) {
+      print('🔥 FLUTTER: Exception in getTeacherDashboardStats: $e');
       rethrow;
     }
   }
