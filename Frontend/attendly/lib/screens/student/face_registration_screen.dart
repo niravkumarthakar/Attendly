@@ -29,13 +29,7 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen> {
 
   // Orientation selection state
   int selectedOrientationIndex = 0;
-  final List<String> _orientations = [
-    'Center',
-    'Left', 
-    'Right',
-    'Up',
-    'Down',
-  ];
+  final List<String> _orientations = ['Center', 'Left', 'Right', 'Up', 'Down'];
 
   final ApiService _apiService = ApiService();
 
@@ -384,7 +378,11 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen> {
       // Parse error message for better user feedback
       String errorMessage = 'Error: ${e.toString()}';
 
-      if (e.toString().contains('Insufficient valid face images')) {
+      if (e.toString().contains('timed out') ||
+          e.toString().contains('timeout')) {
+        errorMessage =
+            'Face registration timed out due to slow network. Please check your connection and try again.';
+      } else if (e.toString().contains('Insufficient valid face images')) {
         errorMessage =
             'Could not detect your face clearly in enough images. Please try again and ensure good lighting and face visibility.';
       } else if (e.toString().contains('At least 5 images are required')) {
@@ -814,7 +812,9 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen> {
                                 itemCount: capturedImages.length,
                                 itemBuilder: (context, index) {
                                   final dataUrl = capturedImages[index];
-                                  final bytes = base64Decode(dataUrl.split(',').last);
+                                  final bytes = base64Decode(
+                                    dataUrl.split(',').last,
+                                  );
                                   return Container(
                                     margin: const EdgeInsets.only(right: 8),
                                     child: ClipRRect(
@@ -857,9 +857,12 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen> {
                             childAspectRatio: 3,
                             mainAxisSpacing: 8,
                             crossAxisSpacing: 8,
-                            children: List.generate(_orientations.length, (index) {
+                            children: List.generate(_orientations.length, (
+                              index,
+                            ) {
                               final orientation = _orientations[index];
-                              final isSelected = selectedOrientationIndex == index;
+                              final isSelected =
+                                  selectedOrientationIndex == index;
                               return GestureDetector(
                                 onTap: () {
                                   setState(() {
@@ -882,7 +885,9 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen> {
                                   child: Text(
                                     orientation,
                                     style: TextStyle(
-                                      color: isSelected ? Colors.white : Colors.black,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : Colors.black,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -905,7 +910,9 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen> {
                             ElevatedButton.icon(
                               onPressed: isCapturing ? null : _captureImage,
                               icon: Icon(
-                                isCapturing ? Icons.hourglass_empty : Icons.camera_alt,
+                                isCapturing
+                                    ? Icons.hourglass_empty
+                                    : Icons.camera_alt,
                                 color: Colors.white,
                               ),
                               label: Text(
@@ -930,7 +937,9 @@ class _FaceRegistrationScreenState extends State<FaceRegistrationScreen> {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 elevation: 8,
-                                shadowColor: AppTheme.primaryColor.withOpacity(0.3),
+                                shadowColor: AppTheme.primaryColor.withOpacity(
+                                  0.3,
+                                ),
                               ),
                             ),
 

@@ -464,11 +464,18 @@ class ApiService {
       throw Exception('No authentication token available');
     }
 
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/face-data/register-student'),
-      headers: headers,
-      body: jsonEncode({'images': images}),
-    );
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/api/face-data/register-student'),
+          headers: headers,
+          body: jsonEncode({'images': images}),
+        )
+        .timeout(
+          const Duration(minutes: 5),
+          onTimeout: () => throw Exception(
+            'Registration timed out. Please check your connection and try again.',
+          ),
+        );
 
     print(
       '🔥 FLUTTER: Face data registration response status: ${response.statusCode}',
@@ -518,11 +525,18 @@ class ApiService {
       '🔥 FLUTTER: Uploading batch with progress - ${images.length} images',
     );
 
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/face-data/upload-batch-with-progress'),
-      headers: headers,
-      body: jsonEncode({'images': images}),
-    );
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/api/face-data/upload-batch-with-progress'),
+          headers: headers,
+          body: jsonEncode({'images': images}),
+        )
+        .timeout(
+          const Duration(minutes: 5),
+          onTimeout: () => throw Exception(
+            'Batch upload timed out. Please check your connection and try again.',
+          ),
+        );
 
     print('🔥 FLUTTER: Batch upload response: ${response.statusCode}');
     return _handleResponse(response);

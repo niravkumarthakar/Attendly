@@ -732,6 +732,9 @@ def delete_face_data():
 @jwt_required()
 def register_student_face_data():
     """Register facial data for a student by capturing multiple images"""
+    import time
+    start_time = time.time()
+    
     try:
         current_user = get_current_user()
         
@@ -740,6 +743,9 @@ def register_student_face_data():
         
         if current_user.role != 'student':
             return jsonify({'error': 'Only students can register facial data'}), 403
+        
+        # Log processing start with timeout warning
+        current_app.logger.info(f"Starting face registration for student {current_user.id} - timeout: 5 minutes")
         
         # Check if student already has face data
         existing_face_data = FaceData.query.filter_by(
@@ -768,11 +774,30 @@ def register_student_face_data():
         processed_images = []
         processing_errors = []
         
-        current_app.logger.info(f"Processing {len(images)} images for student {current_user.id}")
+        # Add progress tracking for better timeout handling
+        total_images = len(images)
+        current_app.logger.info(f"Processing {total_images} images for student {current_user.id} (max processing time: 5 minutes)")
         
         for i, image_data in enumerate(images):
             try:
-                current_app.logger.debug(f"Processing image {i + 1}/{len(images)} for student {current_user.id}")
+                 # Log progress every 5 images or on slow processing
+                if i % 5 == 0 or time.time() - start_time > 30:
+                    elapsed_time = time.time() - start_time
+                    current_app.logger.info(f"Processing image {i + 1}/{total_images} for student {current_user.id} (elapsed: {elapsed_time:.1f}s)")
+                
+                # Check for timeout (allow 4.5 minutes for processing, leave 30s for response)
+                if time.time() - start_time > 270:  # 4.5 minutes
+                    current_app.logger.warning(f"Face processing timeout approaching for student {current_user.id} at image {i + 1}")
+                    return jsonify({
+                        'error': 'Processing timeout. Please try with fewer images or ensure stable network connection.',
+                        'details': {
+                            'processed_images': len(all_encodings),
+                            'total_images': total_images,
+                            'timeout_at_image': i + 1
+                        }
+                    }), 408  # Request Timeout
+                
+                current_app.logger.debug(f"Processing image {i + 1}/{total_images} for student {current_user.id}")
                 
                 # Check image data format
                 if not image_data or not isinstance(image_data, str):
@@ -865,7 +890,9 @@ def register_student_face_data():
         
         db.session.commit()
         
-        current_app.logger.info(f"Successfully registered facial data for student {current_user.id}")
+        # Log completion time
+        total_time = time.time() - start_time
+        current_app.logger.info(f"Successfully registered facial data for student {current_user.id} in {total_time:.1f} seconds")
         
         return jsonify({
             'message': 'Facial data registered successfully',
@@ -874,6 +901,7 @@ def register_student_face_data():
                 'total_images_submitted': len(images),
                 'valid_images_processed': len(all_encodings),
                 'processed_images': processed_images,
+                'processing_time_seconds': round(total_time, 1),
                 'registration_complete': True
             }
         }), 201
@@ -1017,6 +1045,9 @@ def upload_single_face_image():
 @jwt_required()
 def upload_batch_with_progress():
     """Upload multiple images with detailed progress feedback"""
+    import time
+    start_time = time.time()
+    
     try:
         current_user = get_current_user()
         
@@ -1025,6 +1056,9 @@ def upload_batch_with_progress():
         
         if current_user.role != 'student':
             return jsonify({'error': 'Only students can upload face data'}), 403
+        
+        # Log processing start with timeout info
+        current_app.logger.info(f"Starting batch upload for student {current_user.id} - max processing time: 5 minutes")
         
         data = request.get_json()
         
@@ -1047,12 +1081,28 @@ def upload_batch_with_progress():
         current_app.logger.info(f"Processing batch upload of {total_images} images for student {current_user.id}")
         
         for i, image_data in enumerate(images):
+            # Check for timeout (allow 4.5 minutes for processing)
+            if time.time() - start_time > 270:  # 4.5 minutes
+                current_app.logger.warning(f"Batch upload timeout approaching for student {current_user.id} at image {i + 1}")
+                return jsonify({
+                    'error': 'Processing timeout. Please try with fewer images or ensure stable network connection.',
+                    'partial_results': results,
+                    'processed_count': i,
+                    'total_count': total_images,
+                    'timeout_at_image': i + 1
+                }), 408  # Request Timeout
+            
             image_result = {
                 'image_number': i + 1,
                 'success': False,
                 'face_detected': False,
                 'error': None
             }
+            
+            # Log progress for every 5 images
+            if i % 5 == 0:
+                elapsed_time = time.time() - start_time
+                current_app.logger.info(f"Batch processing image {i + 1}/{total_images} for student {current_user.id} (elapsed: {elapsed_time:.1f}s)")
             
             try:
                 # Decode image
