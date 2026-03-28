@@ -164,7 +164,7 @@ GET  /api/attendance/reports/{session_id}
 
 This project is licensed under the MIT License.
 
-## Collaborators
+## 🤝 Collaborators
 
 1. Niravkumar Thakar
 2. Yashkumar Fadadu
