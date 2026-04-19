@@ -174,6 +174,6 @@ This project is licensed under the MIT License.
 
 <div align="center">
 
-**Built with ❤️ for educational institutions**
+**Built for educational institutions**
 
 </div>
